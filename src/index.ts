@@ -1,7 +1,12 @@
-// TODO exclude librarian if no outsiders exist
+import _ from 'lodash';
+
+// nice-to-haves
+// TODO complain if seeded roles exceed allowed distributions
 // TODO maybe genericize first night demon stuff if helps for advanced roles
+
+// need-to-haves
+// TODO exclude librarian if no outsiders exist
 // TODO add drunk
-// TODO add baron
 // TODO add reminder text per-role (e.g. if the virgin is nominated by a townsfolk, and virgin is not drunk|poisoned, that townsfolk is executed)
 
 enum Townsfolk {
@@ -13,7 +18,7 @@ enum Townsfolk {
     FortuneTeller = 'Fortune Teller',
     Undertaker = 'Undertaker',
     Monk = 'Monk',
-    Ravenkeeper = 'Raven keeper',
+    Ravenkeeper = 'Ravenkeeper',
     Virgin = 'Virgin',
     Slayer = 'Slayer',
     Soldier = 'Soldier',
@@ -38,7 +43,7 @@ enum Minion {
     Poisoner = 'Poisoner',
     Spy = 'Spy',
     ScarletWoman = 'Scarlet Woman',
-    // Baron = 'Baron', // TODO not yet supported
+    Baron = 'Baron',
 }
 
 enum Demon {
@@ -135,7 +140,7 @@ const NightInstruction: NightInstruction[] = [
     {
         role: Outsider.Butler,
         instructionText:
-            'Ask NAME to choose a player. This is their master. Their vote counts for 0 unless their master (unless poisoned).',
+            'Ask NAME to choose a player. This is their master. Their vote counts for 0 unless their master also votes (unless poisoned).',
     },
 ];
 
@@ -183,9 +188,6 @@ const roleDistributionByPlayerCount: { [count: number]: RoleDistribution } = {
         demon: 1,
     },
 };
-
-const getRandomRoles = (count: number, roles: Role[]): Role[] =>
-    shuffle([...roles]).slice(0, count);
 
 const shuffle = <T>(array: T[]): T[] => {
     let currentIndex = array.length;
@@ -296,26 +298,61 @@ const makeNightInstructions = (playerRoles: {
     return { firstNightInstructions, otherNightsInstructions };
 };
 
-const makeScript = (players: string[]): Script => {
+const PruneRulesByRole: {
+    [role in Role]?: (
+        distrubition: RoleDistribution & { townsfolk: number },
+    ) => boolean;
+} = {
+    [Townsfolk.Librarian]: (distribution) => Boolean(distribution.outsider),
+};
+
+const pruneRoles = (
+    roles: Role[],
+    distribution: RoleDistribution & { townsfolk: number },
+): Role[] =>
+    roles.filter((x) => {
+        const filter = PruneRulesByRole[x];
+        return filter === undefined || filter(distribution);
+    });
+
+const makeScript = (players: string[], seededRoles: Role[] = []): Script => {
     const roleDistribution = roleDistributionByPlayerCount[players.length];
     if (!roleDistribution) throw new Error('Unsupported number of players');
 
+    const hasBaron = seededRoles.includes(Minion.Baron);
     const playerSeating = shuffle(players);
-    const outsiderCount = roleDistribution.outsider || 0;
+    const outsiderCount = (roleDistribution.outsider || 0) + (hasBaron ? 2 : 0);
     const townsfolkCount =
         players.length -
         roleDistribution.demon -
         roleDistribution.minion -
         outsiderCount;
 
+    const finalDistribution = {
+        demon: roleDistribution.demon,
+        outsider: outsiderCount,
+        minion: roleDistribution.minion,
+        townsfolk: townsfolkCount,
+    };
+
     const roles: Role[] = shuffle([
-        ...getRandomRoles(roleDistribution.demon, Object.values(Demon)),
-        ...getRandomRoles(roleDistribution.minion, Object.values(Minion)),
-        ...getRandomRoles(
-            roleDistribution.outsider || 0,
-            Object.values(Outsider),
+        ...generateRoles(roleDistribution.demon, Object.values(Demon)),
+        ...generateRoles(
+            roleDistribution.minion,
+            pruneRoles(Object.values(Minion), finalDistribution),
+            seededRoles,
+            new Set([Minion.Baron]),
         ),
-        ...getRandomRoles(townsfolkCount, Object.values(Townsfolk)),
+        ...generateRoles(
+            outsiderCount,
+            pruneRoles(Object.values(Outsider), finalDistribution),
+            seededRoles,
+        ),
+        ...generateRoles(
+            townsfolkCount,
+            pruneRoles(Object.values(Townsfolk), finalDistribution),
+            seededRoles,
+        ),
     ]);
 
     const playerRoles = playerSeating.reduce<{ [player: string]: Role }>(
@@ -339,10 +376,28 @@ const makeScript = (players: string[]): Script => {
     };
 };
 
-const testNames = ['Arilyn', 'Alex', 'Dash', 'Naomi', 'Isobel'];
+const generateRoles = (
+    count: number,
+    roles: Role[],
+    allSeededRoles: Role[] = [],
+    randomBlacklist: Set<Role> = new Set<Role>(),
+): Role[] => {
+    const seededRoles = _.intersection(roles, allSeededRoles);
+    const seededRoleSet = new Set(allSeededRoles);
+    const remainingRoles = roles.reduce<Role[]>((memo, r) => {
+        if (seededRoleSet.has(r) || randomBlacklist.has(r)) return memo;
+        memo.push(r);
+        return memo;
+    }, []);
+    const remainderCount = count - seededRoles.length;
+    return [
+        ...seededRoles,
+        ...shuffle(remainingRoles).slice(0, remainderCount),
+    ];
+};
 
 const printHeader = (text: string): void => {
-    console.log(`\n---- ${text}`);
+    console.log(`---- ${text}`);
 };
 
 const printSubheader = (text: string): void => {
@@ -376,5 +431,8 @@ const printScript = (script: Script): void => {
     );
 };
 
-const testScript = makeScript(['Arilyn', 'Alex', 'Dash', 'Naomi', 'Isobel']);
-printScript(testScript);
+const myScript = makeScript(
+    ['Arilyn', 'Alex', 'Dash', 'Naomi', 'Isobel', 'Cat', 'Dog', 'Pineapple'],
+    [Minion.Baron],
+);
+printScript(myScript);

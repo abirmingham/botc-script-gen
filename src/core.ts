@@ -9,7 +9,7 @@ import _ from 'lodash';
 // TODO add drunk
 // TODO add reminder text per-role (e.g. if the virgin is nominated by a townsfolk, and virgin is not drunk|poisoned, that townsfolk is executed)
 
-enum Townsfolk {
+export enum Townsfolk {
     Washerwoman = 'Washerwoman',
     Librarian = 'Librarian',
     Investigator = 'Investigator',
@@ -32,14 +32,14 @@ interface NightInstruction {
     isSubsequentNightsOnly?: true;
 }
 
-enum Outsider {
+export enum Outsider {
     Butler = 'Butler',
     // Drunk = 'Drunk', // TODO not yet supported
     Recluse = 'Recluse',
     Saint = 'Saint',
 }
 
-enum Minion {
+export enum Minion {
     Poisoner = 'Poisoner',
     Spy = 'Spy',
     ScarletWoman = 'Scarlet Woman',
@@ -50,8 +50,8 @@ enum Demon {
     Imp = 'Imp',
 }
 
-type RoleType = 'townsfolk' | 'outsider' | 'minion' | 'demon';
 type Role = Townsfolk | Outsider | Minion | Demon;
+export type SeedableRole = Townsfolk | Outsider | Minion;
 
 const NightInstruction: NightInstruction[] = [
     {
@@ -150,7 +150,7 @@ interface RoleDistribution {
     demon: number;
 }
 
-interface Script {
+export interface Script {
     playerSeating: string[];
     playerRoles: {
         [player: string]: Role;
@@ -315,7 +315,10 @@ const pruneRoles = (
         return filter === undefined || filter(distribution);
     });
 
-const makeScript = (players: string[], seededRoles: Role[] = []): Script => {
+export const makeScript = (
+    players: string[],
+    seededRoles: Role[] = [],
+): Script => {
     const roleDistribution = roleDistributionByPlayerCount[players.length];
     if (!roleDistribution) throw new Error('Unsupported number of players');
 
@@ -396,43 +399,28 @@ const generateRoles = (
     ];
 };
 
-const printHeader = (text: string): void => {
-    console.log(`---- ${text}`);
-};
+// const printScript = (script: Script): void => {
+//     console.log(`
+// Trouble Brewing for ${script.playerSeating.length} players
 
-const printSubheader = (text: string): void => {
-    console.log(`\n\n-- ${text}`);
-};
+// -- Player Seating (without roles - copy this to the players):
+//   ${script.playerSeating.join('\n  ')}
 
-const printText = (text: string): void => {
-    console.log(`   ${text}`);
-};
+// -- Player Seating (with roles - keep this secret):
+//   ${script.playerSeating
+//       .map((player) => `${player} (${script.playerRoles[player]})`)
+//       .join('\n  ')}
 
-const printScript = (script: Script): void => {
-    printHeader(`Trouble Brewing for ${script.playerSeating.length} players`);
-    printSubheader(
-        'Player Seating (without roles - copy this to the players):',
-    );
-    script.playerSeating.forEach((player) => printText(player));
+// -- First Night Instructions:
+//   # ${script.firstNightInstructions.join('\n  # ')}
 
-    printSubheader('Player Seating (with roles - keep this secret):');
-    script.playerSeating.forEach((player) =>
-        printText(`${player} (${script.playerRoles[player]})`),
-    );
+// -- Other Night Instructions:
+//   # ${script.otherNightsInstructions.join('\n  # ')}
+// `);
+// };
 
-    printSubheader('First Night Instructions:');
-    script.firstNightInstructions.forEach((instruction, i) =>
-        printText(`${i + 1}) ${instruction}`),
-    );
-
-    printSubheader('Other Night Instructions:');
-    script.otherNightsInstructions.forEach((instruction, i) =>
-        printText(`${i + 1}) ${instruction}`),
-    );
-};
-
-const myScript = makeScript(
-    ['Arilyn', 'Alex', 'Dash', 'Naomi', 'Isobel', 'Cat', 'Dog', 'Pineapple'],
-    [Minion.Baron],
-);
-printScript(myScript);
+// // const myScript = makeScript(
+// //     ['Alex', 'Dash', 'Naomi', 'Isobel', 'Nika', 'Kristy'],
+// //     // [Minion.Baron],
+// // );
+// // printScript(myScript);

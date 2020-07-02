@@ -1,4 +1,4 @@
-import _ from 'lodash';
+import _, { without, isObject } from 'lodash';
 
 // nice-to-haves
 // TODO complain if seeded roles exceed allowed distributions
@@ -34,7 +34,7 @@ interface NightInstruction {
 
 export enum Outsider {
     Butler = 'Butler',
-    // Drunk = 'Drunk', // TODO not yet supported
+    Drunk = 'Drunk',
     Recluse = 'Recluse',
     Saint = 'Saint',
 }
@@ -50,16 +50,10 @@ enum Demon {
     Imp = 'Imp',
 }
 
-type Role = Townsfolk | Outsider | Minion | Demon;
+export type Role = Townsfolk | Outsider | Minion | Demon;
 export type SeedableRole = Townsfolk | Outsider | Minion;
 
 const NightInstruction: NightInstruction[] = [
-    {
-        role: Minion.Spy,
-        instructionText:
-            'Because you have the spy, write down which characters you told the demon are not in play. Make sure you include this information when you give the spy your notes.',
-        isFirstNightOnly: true,
-    },
     {
         role: Townsfolk.Empath,
         instructionText: 'Choose a red herring for the empath.',
@@ -145,15 +139,23 @@ const NightInstruction: NightInstruction[] = [
 ];
 
 interface RoleDistribution {
+    townsfolk?: number;
     outsider?: number;
     minion: number;
     demon: number;
 }
 
+export type PretendingRole = { role: Role; pretendRole: Role };
+export const PretendingRole = {
+    guard: (x: Role | PretendingRole): x is PretendingRole =>
+        isObject(x) && x.hasOwnProperty('pretendRole'),
+};
+
 export interface Script {
+    publicRoleDistribution: RoleDistribution;
     playerSeating: string[];
     playerRoles: {
-        [player: string]: Role;
+        [player: string]: Role | PretendingRole;
     };
     firstNightInstructions: string[];
     otherNightsInstructions: string[];
@@ -185,6 +187,30 @@ const roleDistributionByPlayerCount: { [count: number]: RoleDistribution } = {
     },
     10: {
         minion: 2,
+        demon: 1,
+    },
+    11: {
+        outsider: 1,
+        minion: 2,
+        demon: 1,
+    },
+    12: {
+        outsider: 2,
+        minion: 2,
+        demon: 1,
+    },
+    13: {
+        minion: 3,
+        demon: 1,
+    },
+    14: {
+        outsider: 1,
+        minion: 3,
+        demon: 1,
+    },
+    15: {
+        outsider: 2,
+        minion: 3,
         demon: 1,
     },
 };
@@ -228,9 +254,11 @@ const makeInstruction = (
 ): string => `${role} - ${instructionText.replace('NAME', player)}`;
 
 const getCharactersNotInPlay = (playerRoles: {
-    [player: string]: Role;
+    [player: string]: Role | PretendingRole;
 }): Role[] => {
-    const roleSet = new Set<Role>(Object.values(playerRoles));
+    const roleSet = new Set<Role>(
+        Object.values(playerRoles).map(getApparentRole),
+    );
     return [...Object.values(Townsfolk), ...Object.values(Outsider)].reduce<
         Role[]
     >((memo, role) => {
@@ -240,8 +268,11 @@ const getCharactersNotInPlay = (playerRoles: {
     }, []);
 };
 
+const getApparentRole = (role: Role | PretendingRole): Role =>
+    PretendingRole.guard(role) ? role.pretendRole : role;
+
 const makeNightInstructions = (playerRoles: {
-    [player: string]: Role;
+    [player: string]: Role | PretendingRole;
 }): {
     firstNightInstructions: string[];
     otherNightsInstructions: string[];
@@ -249,7 +280,7 @@ const makeNightInstructions = (playerRoles: {
     const playersByRole = Object.keys(playerRoles).reduce<
         { [role in Role]?: string }
     >((memo, player) => {
-        memo[playerRoles[player]] = player;
+        memo[getApparentRole(playerRoles[player])] = player;
         return memo;
     }, {});
 
@@ -319,52 +350,70 @@ export const makeScript = (
     players: string[],
     seededRoles: Role[] = [],
 ): Script => {
-    const roleDistribution = roleDistributionByPlayerCount[players.length];
-    if (!roleDistribution) throw new Error('Unsupported number of players');
+    const initRoleDistribution = roleDistributionByPlayerCount[players.length];
+    if (!initRoleDistribution) throw new Error('Unsupported number of players');
 
+    const publicRoleDistribution = {
+        townsfolk:
+            players.length -
+            initRoleDistribution.demon -
+            initRoleDistribution.minion -
+            (initRoleDistribution.outsider || 0),
+        outsider: initRoleDistribution.outsider || 0,
+        minion: initRoleDistribution.minion,
+        demon: initRoleDistribution.demon,
+    };
+
+    const hasDrunk = seededRoles.includes(Outsider.Drunk);
     const hasBaron = seededRoles.includes(Minion.Baron);
     const playerSeating = shuffle(players);
-    const outsiderCount = (roleDistribution.outsider || 0) + (hasBaron ? 2 : 0);
+    const outsiderCount =
+        (publicRoleDistribution.outsider || 0) +
+        (hasBaron ? 2 : 0) -
+        (hasDrunk ? 1 : 0);
     const townsfolkCount =
         players.length -
-        roleDistribution.demon -
-        roleDistribution.minion -
+        publicRoleDistribution.demon -
+        publicRoleDistribution.minion -
         outsiderCount;
 
     const finalDistribution = {
-        demon: roleDistribution.demon,
+        demon: publicRoleDistribution.demon,
         outsider: outsiderCount,
-        minion: roleDistribution.minion,
+        minion: publicRoleDistribution.minion,
         townsfolk: townsfolkCount,
     };
 
-    const roles: Role[] = shuffle([
-        ...generateRoles(roleDistribution.demon, Object.values(Demon)),
+    const roles: (Role | PretendingRole)[] = shuffle([
+        ...generateRoles(publicRoleDistribution.demon, Object.values(Demon)),
         ...generateRoles(
-            roleDistribution.minion,
+            publicRoleDistribution.minion,
             pruneRoles(Object.values(Minion), finalDistribution),
             seededRoles,
-            new Set([Minion.Baron]),
+            [Minion.Baron],
         ),
         ...generateRoles(
             outsiderCount,
             pruneRoles(Object.values(Outsider), finalDistribution),
-            seededRoles,
+            without(seededRoles, Outsider.Drunk),
+            [Outsider.Drunk],
         ),
-        ...generateRoles(
-            townsfolkCount,
-            pruneRoles(Object.values(Townsfolk), finalDistribution),
-            seededRoles,
+        ...assignDrunk(
+            generateRoles(
+                townsfolkCount,
+                pruneRoles(Object.values(Townsfolk), finalDistribution),
+                seededRoles,
+            ),
+            hasDrunk,
         ),
     ]);
 
-    const playerRoles = playerSeating.reduce<{ [player: string]: Role }>(
-        (memo, player, i) => {
-            memo[player] = roles[i];
-            return memo;
-        },
-        {},
-    );
+    const playerRoles = playerSeating.reduce<{
+        [player: string]: Role | PretendingRole;
+    }>((memo, player, i) => {
+        memo[player] = roles[i];
+        return memo;
+    }, {});
 
     const {
         firstNightInstructions,
@@ -372,6 +421,7 @@ export const makeScript = (
     } = makeNightInstructions(playerRoles);
 
     return {
+        publicRoleDistribution,
         playerSeating,
         playerRoles,
         firstNightInstructions,
@@ -383,12 +433,13 @@ const generateRoles = (
     count: number,
     roles: Role[],
     allSeededRoles: Role[] = [],
-    randomBlacklist: Set<Role> = new Set<Role>(),
+    randomBlacklist: Role[] = [],
 ): Role[] => {
+    const randomBlacklistSet = new Set(randomBlacklist);
     const seededRoles = _.intersection(roles, allSeededRoles);
     const seededRoleSet = new Set(allSeededRoles);
     const remainingRoles = roles.reduce<Role[]>((memo, r) => {
-        if (seededRoleSet.has(r) || randomBlacklist.has(r)) return memo;
+        if (seededRoleSet.has(r) || randomBlacklistSet.has(r)) return memo;
         memo.push(r);
         return memo;
     }, []);
@@ -397,6 +448,19 @@ const generateRoles = (
         ...seededRoles,
         ...shuffle(remainingRoles).slice(0, remainderCount),
     ];
+};
+
+const assignDrunk = (
+    roles: Role[],
+    hasDrunk: boolean,
+): (Role | PretendingRole)[] => {
+    if (!hasDrunk) return roles;
+    const allTownsfolk = new Set<Role>(Object.values(Townsfolk));
+    const assignedTownsfolk = roles.filter((r) => allTownsfolk.has(r));
+    const drunk = shuffle(assignedTownsfolk)[0];
+    return roles.map((r) =>
+        r === drunk ? { role: Outsider.Drunk, pretendRole: r } : r,
+    );
 };
 
 // const printScript = (script: Script): void => {

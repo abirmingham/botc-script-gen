@@ -27,6 +27,8 @@ import {
     SeedableRole,
     Script,
     makeScript,
+    PretendingRole,
+    Role,
 } from './core';
 import { without, capitalize } from 'lodash';
 
@@ -44,7 +46,7 @@ const useStyles = makeStyles((theme) => ({
         fontSize: 22,
     },
     paper: {
-        padding: theme.spacing(1),
+        padding: theme.spacing(2),
     },
     playersInput: {
         fontFamily: 'monospace',
@@ -56,6 +58,7 @@ const useStyles = makeStyles((theme) => ({
     roleOption: {
         display: 'inline-block',
         padding: theme.spacing(1),
+        minWidth: 200,
     },
 }));
 
@@ -65,9 +68,9 @@ const defaultPlayers = [
     'Kristy',
     'Brittany',
     'Doug',
-    'Isobel',
-    'Naomi',
-    'Dash',
+    'George',
+    'Carl',
+    'Georgina',
     'Nika',
 ];
 
@@ -175,11 +178,13 @@ export const App: FC = () => {
                             </Grid>
                         </Paper>
                     </Grid>
-                    {/* SEATING */}
+                    {/* PUBLIC INFO */}
                     {script && (
                         <Grid item>
                             <Paper className={classes.paper}>
-                                <div className={classes.title}>Seating</div>
+                                <div className={classes.title}>
+                                    Public Information
+                                </div>
                                 <TextField
                                     inputProps={{
                                         className: classes.playersInput,
@@ -188,7 +193,7 @@ export const App: FC = () => {
                                     multiline
                                     variant="outlined"
                                     margin="normal"
-                                    value={script.playerSeating.join(`\n`)}
+                                    value={printPublicInformation(script)}
                                 />
                             </Paper>
                         </Grid>
@@ -198,7 +203,7 @@ export const App: FC = () => {
                         <Grid item>
                             <Paper className={classes.paper}>
                                 <div className={classes.title}>
-                                    Seating With Roles
+                                    Role Assignment
                                 </div>
                                 <TextField
                                     inputProps={{
@@ -214,7 +219,9 @@ export const App: FC = () => {
                                                 `${printWide(
                                                     p,
                                                     maxNameLength,
-                                                )} - ${script.playerRoles[p]}`,
+                                                )} - ${printRole(
+                                                    script.playerRoles[p],
+                                                )}`,
                                         )
                                         .join(`\n`)}
                                 />
@@ -325,4 +332,18 @@ const printWide = (name: string, length: number): string => {
         padding += ' ';
     }
     return name + padding;
+};
+
+const printRole = (role: Role | PretendingRole): string =>
+    PretendingRole.guard(role) ? `${role.pretendRole}/${role.role}` : role;
+
+const printPublicInformation = (script: Script): string => {
+    return `Role Distribution:
+  ${script.publicRoleDistribution.demon} demon
+  ${script.publicRoleDistribution.minion} minion(s)
+  ${script.publicRoleDistribution.outsider} outsider(s)
+  ${script.publicRoleDistribution.townsfolk} townsfolk(s)
+
+Seating:
+  ${script.playerSeating.join('\n  ')}`;
 };

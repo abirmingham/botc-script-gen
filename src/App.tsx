@@ -1,7 +1,11 @@
 import React, { FC, useState, useCallback, useMemo } from 'react';
 
+import AccordionDetails from '@material-ui/core/AccordionDetails';
+import ExpandMoreIcon from '@material-ui/icons/ExpandMore';
+
 import CssBaseline from '@material-ui/core/CssBaseline';
 import {
+    ExpansionPanel,
     Grid,
     TextField,
     FormControl,
@@ -19,6 +23,9 @@ import {
     List,
     ListItem,
     ListItemIcon,
+    Typography,
+    ExpansionPanelSummary,
+    ExpansionPanelDetails,
 } from '@material-ui/core';
 import {
     Minion,
@@ -29,6 +36,7 @@ import {
     makeScript,
     PretendingRole,
     Role,
+    NightInstruction,
 } from './core';
 import { without, capitalize } from 'lodash';
 
@@ -59,6 +67,10 @@ const useStyles = makeStyles((theme) => ({
         display: 'inline-block',
         padding: theme.spacing(1),
         minWidth: 200,
+    },
+    expansionPanel: {
+        maxWidth: 500,
+        backgroundColor: '#82787930',
     },
 }));
 
@@ -299,28 +311,33 @@ const SeededRoleInput: FC<{
     );
 };
 
-const InstructionsPaper: FC<{ label: string; instructions: string[] }> = ({
-    label,
-    instructions,
-}) => {
+const InstructionsPaper: FC<{
+    label: string;
+    instructions: NightInstruction[];
+}> = ({ label, instructions }) => {
     const classes = useStyles();
     return (
         <Paper className={classes.paper}>
             <div className={classes.title}>{label}</div>
-            <List>
-                {instructions.map((instruction, i) => (
-                    <ListItem key={instruction} dense>
-                        <ListItemIcon>
-                            <Checkbox
-                                edge="start"
-                                tabIndex={-1}
-                                disableRipple
-                            />
-                        </ListItemIcon>
-                        <ListItemText primary={instruction} />
-                    </ListItem>
-                ))}
-            </List>
+            {/* <List> */}
+            {instructions.map((instruction, i) => (
+                <ExpansionPanel
+                    className={classes.expansionPanel}
+                    defaultExpanded={true}
+                >
+                    <ExpansionPanelSummary
+                        expandIcon={<ExpandMoreIcon />}
+                        aria-controls="panel1a-content"
+                        id="panel1a-header"
+                    >
+                        <Typography>{instruction.role}</Typography>
+                    </ExpansionPanelSummary>
+                    <ExpansionPanelDetails>
+                        <Typography>{instruction.instructionText}</Typography>
+                    </ExpansionPanelDetails>
+                </ExpansionPanel>
+            ))}
+            {/* </List> */}
         </Paper>
     );
 };

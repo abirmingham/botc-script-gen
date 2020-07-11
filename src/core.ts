@@ -9,6 +9,15 @@ import _, { without, isObject } from 'lodash';
 // TODO add drunk
 // TODO add reminder text per-role (e.g. if the virgin is nominated by a townsfolk, and virgin is not drunk|poisoned, that townsfolk is executed)
 
+// Bugs
+// - monk shouldn't show up first night
+// - Empath doesn't have a red herring, fortune teller does
+
+// Features
+// - Ask Brittany for storyteller intro new player text
+// - Mayor should have reminder text
+// - Add ability to remove night items (as roles go away)
+
 export enum Townsfolk {
     Washerwoman = 'Washerwoman',
     Librarian = 'Librarian',
@@ -25,7 +34,7 @@ export enum Townsfolk {
     Mayor = 'Mayor',
 }
 
-interface NightInstruction {
+export interface NightInstruction {
     role: Role;
     instructionText: string;
     isFirstNightOnly?: true;
@@ -55,8 +64,8 @@ export type SeedableRole = Townsfolk | Outsider | Minion;
 
 const NightInstruction: NightInstruction[] = [
     {
-        role: Townsfolk.Empath,
-        instructionText: 'Choose a red herring for the empath.',
+        role: Townsfolk.FortuneTeller,
+        instructionText: 'Choose a red herring for the fortune teller.',
         isFirstNightOnly: true,
     },
     {
@@ -157,8 +166,8 @@ export interface Script {
     playerRoles: {
         [player: string]: Role | PretendingRole;
     };
-    firstNightInstructions: string[];
-    otherNightsInstructions: string[];
+    firstNightInstructions: NightInstruction[];
+    otherNightsInstructions: NightInstruction[];
 }
 
 const roleDistributionByPlayerCount: { [count: number]: RoleDistribution } = {
@@ -251,7 +260,7 @@ const makeInstruction = (
     role: Role,
     player: string,
     instructionText: string,
-): string => `${role} - ${instructionText.replace('NAME', player)}`;
+): string => instructionText.replace(new RegExp('NAME', 'g'), player);
 
 const getCharactersNotInPlay = (playerRoles: {
     [player: string]: Role | PretendingRole;
@@ -274,8 +283,8 @@ const getApparentRole = (role: Role | PretendingRole): Role =>
 const makeNightInstructions = (playerRoles: {
     [player: string]: Role | PretendingRole;
 }): {
-    firstNightInstructions: string[];
-    otherNightsInstructions: string[];
+    firstNightInstructions: NightInstruction[];
+    otherNightsInstructions: NightInstruction[];
 } => {
     const playersByRole = Object.keys(playerRoles).reduce<
         { [role in Role]?: string }
@@ -289,38 +298,53 @@ const makeNightInstructions = (playerRoles: {
     const charactersNotInPlay = getCharactersNotInPlay(playerRoles);
 
     const firstNightInstructions = [
-        ...minions.map<string>(
-            (player) => `Tell ${player} that ${demon} is the demon`,
-        ),
-        `Tell the demon (${demon}) their minions: ${minions.join(', ')}`,
-        `Tell the demon (${demon}) that three of these characters are not in play: ${charactersNotInPlay.join(
-            ', ',
-        )}`,
-        ...NightInstruction.reduce<string[]>((memo, instruction) => {
+        ...minions.map<NightInstruction>((player) => ({
+            role: Demon.Imp,
+            instructionText: `Tell ${player} that ${demon} is the demon`,
+            firstNightOnly: true,
+        })),
+        {
+            role: Demon.Imp,
+            instructionText: `Tell the demon (${demon}) their minions: ${minions.join(
+                ', ',
+            )}`,
+            firstNightOnly: true,
+        },
+        {
+            role: Demon.Imp,
+            instructionText: `Tell the demon (${demon}) that three of these characters are not in play: ${charactersNotInPlay.join(
+                ', ',
+            )}`,
+            firstNightOnly: true,
+        },
+
+        ...NightInstruction.reduce<NightInstruction[]>((memo, instruction) => {
             const player = playersByRole[instruction.role];
             if (instruction.isSubsequentNightsOnly || !player) return memo;
-            memo.push(
-                makeInstruction(
+            memo.push({
+                ...instruction,
+                instructionText: makeInstruction(
                     instruction.role,
                     player,
                     instruction.instructionText,
                 ),
-            );
+            });
             return memo;
         }, []),
     ];
 
-    const otherNightsInstructions: string[] = NightInstruction.reduce<string[]>(
+    const otherNightsInstructions = NightInstruction.reduce<NightInstruction[]>(
         (memo, instruction) => {
             const player = playersByRole[instruction.role];
             if (instruction.isFirstNightOnly || !player) return memo;
-            memo.push(
-                makeInstruction(
+            memo.push({
+                ...instruction,
+                instructionText: makeInstruction(
                     instruction.role,
                     player,
                     instruction.instructionText,
                 ),
-            );
+            });
             return memo;
         },
         [],
